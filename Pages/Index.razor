@@ -1,0 +1,64 @@
+﻿@page "/"
+@inject IJSRuntime JSRuntime
+
+<h3 class="d-flex justify-content-center mb-5">Welcome to SmartImage</h3>
+
+<div class="container   ">
+    <div class="d-flex">
+        <div class="form-group mr-2 w-100">
+            <input type="text" placeholder="Upload Image URL" class="form-control" @bind="imageUrl" />
+        </div>
+
+        <button class="btn btn-primary" @onclick="UploadImage">Upload</button>
+    </div>
+
+
+    @if (!string.IsNullOrEmpty(uploadedImageUrl))
+    {
+        <div class="row d-flex justify-content-center px-3">
+            <div class="mt-5 mb-3 ">
+
+                <h3>Uploaded Image:</h3>
+            </div>
+            <div class="my-3 pb-3 mx-4 text-center image-background ">
+                <img src="@uploadedImageUrl" alt="Uploaded Image" class="img-fluid pt-3" />
+            </div>
+        </div>
+        <div class="row my-4">
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100">Blurry</button>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100">Skewed</button>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100">Bright</button>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100">Dim</button>
+            </div>
+        </div>
+    }
+</div>
+
+<style scoped>
+    .image-background {
+        border: 1px grey solid;
+        background-color: rgb(240, 240, 240);
+        border-radius: 8px;
+        padding-right: 20px;
+        padding-left: 20px;
+    }
+</style>
+
+@code {
+    private string imageUrl = "";
+    private string uploadedImageUrl = "";
+
+    private async Task UploadImage()
+    {
+        uploadedImageUrl = imageUrl;
+
+        imageUrl = "";
+    }
+}
