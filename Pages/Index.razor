@@ -52,7 +52,7 @@
         using var src = new Mat(imagePath, ImreadModes.Grayscale);
         using var dst = new Mat();
 
-        Cv2.Canny(src, dst, 100, 200);
+        Cv2.Canny(src, dst, 50, 200);
 
         Cv2.Resize(src, src, new Size(800, 800));
         Cv2.Resize(dst, dst, new Size(800, 800));
