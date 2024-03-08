@@ -1,66 +1,113 @@
-﻿@page "/"
+﻿@page "/ocr"
 @inject IJSRuntime JSRuntime
 @using OpenCvSharp
 
-<h3 class="d-flex justify-content-center mb-5">Welcome to SmartImage</h3>
+<h3>Document Analysis</h3>
 
-<div class="container   ">
-    <div class="d-flex">
-
-        <button class="btn btn-primary p-5 w-100" @onclick="UploadImage">Test</button>
-    </div>
-    <div class="row">
-        <h2 class="mt-4">Image Links</h2>
-        <p>https://thumbs.dreamstime.com/z/blank-spiral-note-pad-lined-paper-rugged-black-background-108841894.jpg</p>
-    </div>
-
-
-    @if (!string.IsNullOrEmpty(uploadedImageUrl))
-    {
-        <div class="row mt-5 mb-3 ">
-            <h3>Uploaded Image:</h3>
-            <div class="my-3 pb-3 mx-4 text-center card shadowlg">
-                <img src="@uploadedImageUrl" alt="Uploaded Image" class="img-fluid pt-3" />
+<InputFile OnChange="@UploadImage" />
+<button @onclick="ProcessImage" disabled="@(!isFileUploaded)">Submit</button>
+<div class="row">
+    <div class="col-md-6">
+        @if (originalImage != null)
+        {
+            <div>
+                <h4>Original Image</h4>
+                <img style="max-width: 500px;" src="@originalImage" alt="Original Image" />
             </div>
-        </div>
+        }
 
-    }
+    </div>
+    <div class="col-md-6">
+        @if (processedImage != null)
+        {
+            <div>
+                <h4>Processed Image</h4>
+                <img src="@processedImage" alt="Processed Image" />
+            </div>
+        }
+
+    </div>
 </div>
 
 
-
 @code {
-    private string imageUrl = "";
-    private string uploadedImageUrl = "";
+    private IBrowserFile? uploadedFile;
+    private bool isFileUploaded;
+    private string originalImage;
+    private string processedImage;
 
-    private async Task UploadImage()
+    private readonly int _maxsize = 1024 * 1024 * 10; // 10 MB
+
+    private void UploadImage(InputFileChangeEventArgs e)
     {
-        uploadedImageUrl = imageUrl;
-
-        await EdgeDetector(imageUrl);
-
-        imageUrl = "";
-
+        uploadedFile = e.File;
+        isFileUploaded = uploadedFile != null;
     }
 
-
-    private async Task EdgeDetector(string imageUrl)
+    private async Task ProcessImage()
     {
-        // Construct the relative path to the image in the wwwroot folder
-        string imagePath = $"wwwroot/paper2.jpg";
-
-        using var src = new Mat(imagePath, ImreadModes.Grayscale);
-        using var dst = new Mat();
-
-        Cv2.Canny(src, dst, 50, 200);
-
-        Cv2.Resize(src, src, new Size(800, 800));
-        Cv2.Resize(dst, dst, new Size(800, 800));
-
-        using (new Window("src image", src))
-        using (new Window("dst image", dst))
+        if (uploadedFile != null)
         {
-            Cv2.WaitKey();
+            var fileEntries = uploadedFile.OpenReadStream(_maxsize);
+            using var ms = new MemoryStream();
+            await fileEntries.CopyToAsync(ms).ConfigureAwait(false);
+            ms.Position = 0;
+
+            // Create a data URL from the original image
+            var originalImageBytes = ms.ToArray();
+            var base64String = Convert.ToBase64String(originalImageBytes);
+            originalImage = $"data:image/{uploadedFile.ContentType};base64,{base64String}";
+
+            using var mat = Cv2.ImDecode(originalImageBytes, ImreadModes.Color);
+            
+            // Find the document in the image
+            var contours = FindDocumentContours(mat);
+            if (contours.Length > 0)
+            {
+                var rect = Cv2.BoundingRect(contours[0]);
+
+                // Crop the image to the document
+                var croppedMat = new Mat(mat, rect);
+
+                // Resize the cropped image to span the full height and width
+                var resizedMat = new Mat();
+
+                int newWidth = 800; // Adjust this value as needed
+                int newHeight = (int)(croppedMat.Rows * ((double)newWidth / croppedMat.Cols));
+
+                // Resize the cropped image to the new dimensions
+                Cv2.Resize(croppedMat, resizedMat, new Size(newWidth, newHeight));
+                // Convert the resized image to a byte array
+                using var memoryStream = new MemoryStream();
+                Cv2.ImEncode(".png", resizedMat, out var imageBytes);
+                memoryStream.Write(imageBytes, 0, imageBytes.Length);
+
+                // Create a data URL from the processed image
+                base64String = Convert.ToBase64String(memoryStream.ToArray());
+                processedImage = $"data:image/png;base64,{base64String}";
+            }
         }
+    }
+    private static Point[][] FindDocumentContours(Mat mat)
+    {
+        // Convert the image to grayscale
+        var grayMat = new Mat();
+        Cv2.CvtColor(mat, grayMat, ColorConversionCodes.BGR2GRAY);
+
+        // Apply Gaussian blur to reduce noise
+        var blurredMat = new Mat();
+        Cv2.GaussianBlur(grayMat, blurredMat, new OpenCvSharp.Size(5, 5), 0);
+
+        // Apply adaptive thresholding to binarize the image
+        var thresholdMat = new Mat();
+        Cv2.AdaptiveThreshold(blurredMat, thresholdMat, 255, AdaptiveThresholdTypes.GaussianC, ThresholdTypes.Binary, 11, 2);
+
+        // Find contours in the binarized image
+        var hierarchy = new HierarchyIndex[0];
+        var contours = new Point[0][];
+        Cv2.FindContours(thresholdMat, out contours, out hierarchy, RetrievalModes.External,
+        ContourApproximationModes.ApproxSimple);
+
+        return contours;
     }
 }
